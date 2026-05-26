@@ -16,6 +16,13 @@ from rapid_agent.governance import (
 
 __version__ = "0.1.0"
 
+# Optional Arize Phoenix export (requires arize-phoenix[otel] extra)
+try:
+    from rapid_agent.phoenix_export import export_trace_to_phoenix  # noqa: F401
+    _has_phoenix = True
+except ImportError:
+    _has_phoenix = False
+
 __all__ = [
     "Brief",
     "BriefItem",
