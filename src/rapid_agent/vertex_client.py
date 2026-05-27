@@ -1,7 +1,12 @@
-"""Vertex AI client. Drop-in replacement for GeminiClient for production
-deploys on Cloud Run. No agent changes required — the governance layers
-(BudgetCap, EgressAllowlist, Trace, cast_json) sit above this client and
-stay unchanged."""
+"""Vertex AI client using the google-genai unified SDK.
+
+Drops in for GeminiClient so the four governance layers (BudgetCap,
+EgressAllowlist, Trace, cast_json) sit unchanged above this client.
+
+Uses google-genai's Vertex backend (GOOGLE_GENAI_USE_VERTEXAI=true) which
+hits the v1beta1 endpoint, matching the pattern used by the sibling
+gemini-* services already deployed in this project.
+"""
 from __future__ import annotations
 
 from typing import Any
@@ -17,24 +22,28 @@ class VertexClient:
         *,
         project: str,
         location: str = "us-central1",
-        model: str = "gemini-1.5-flash-002",
+        model: str = "gemini-2.5-flash",
     ) -> None:
-        # Import inside __init__ so test environments without the SDK can still
-        # import this module for type checking.
-        from vertexai import init as vertex_init
-        from vertexai.generative_models import GenerativeModel
+        from google import genai
 
-        vertex_init(project=project, location=location)
-        self._model = GenerativeModel(model)
+        self._client = genai.Client(
+            vertexai=True,
+            project=project,
+            location=location,
+        )
+        self._model = model
         self.name = model
 
     def complete(self, prompt: str, *, temperature: float = 0.2) -> LLMResponse:
-        resp: Any = self._model.generate_content(
-            prompt,
-            generation_config={"temperature": temperature},
+        from google.genai import types
+
+        resp: Any = self._client.models.generate_content(
+            model=self._model,
+            contents=prompt,
+            config=types.GenerateContentConfig(temperature=temperature),
         )
         text = resp.text or ""
         usage = getattr(resp, "usage_metadata", None)
-        in_tok = getattr(usage, "prompt_token_count", _rough_token_count(prompt))
-        out_tok = getattr(usage, "candidates_token_count", _rough_token_count(text))
+        in_tok = getattr(usage, "prompt_token_count", None) or _rough_token_count(prompt)
+        out_tok = getattr(usage, "candidates_token_count", None) or _rough_token_count(text)
         return LLMResponse(text=text, input_tokens=in_tok, output_tokens=out_tok)

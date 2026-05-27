@@ -26,7 +26,7 @@ dependencies = [
 
 [project.optional-dependencies]
 gemini = ["google-generativeai>=0.7"]
-vertex = ["google-cloud-aiplatform>=1.60"]
+vertex = ["google-genai>=1.0"]
 phoenix = [
     "arize-phoenix>=4.0",
     "opentelemetry-sdk>=1.20",

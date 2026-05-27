@@ -12,7 +12,7 @@ Environment:
     ALLOWED_HOSTS          comma-separated egress allowlist, defaults
                            to a safe demo set
     MAX_USD                per-run budget cap, defaults to "0.10"
-    MODEL                  Vertex model name, defaults "gemini-1.5-flash-002"
+    MODEL                  Vertex model name, defaults "gemini-2.5-flash"
 """
 from __future__ import annotations
 
@@ -73,7 +73,7 @@ _DEMO_PAGES = {
 
 _PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT", "")
 _LOCATION = os.environ.get("VERTEX_LOCATION", "us-central1")
-_MODEL = os.environ.get("MODEL", "gemini-1.5-flash-002")
+_MODEL = os.environ.get("MODEL", "gemini-2.5-flash")
 _DEFAULT_HOSTS = "cloud.google.com,ai.google.dev,example.com"
 _ALLOWED_HOSTS = [
     h.strip() for h in os.environ.get("ALLOWED_HOSTS", _DEFAULT_HOSTS).split(",")
