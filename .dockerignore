@@ -1,0 +1,17 @@
+.git
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.mypy_cache
+.ruff_cache
+build
+dist
+*.egg-info
+tests
+examples
+demo_colab.ipynb
+*.md
+!README.md
