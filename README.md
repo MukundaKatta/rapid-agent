@@ -101,8 +101,11 @@ the demo dependency-light. The README notes the production swap.
 | `EgressAllowlist` | Host check by exact match or subdomain. Raises `EgressDenied`. | `agentguard` |
 | `Trace` | Records per-event start, duration, tokens, USD. Serializes to JSON. | `agenttrace` |
 
-You can use them on their own. They do not depend on the rest of the
-package.
+You can use them on their own. `BudgetCap`, `EgressAllowlist` and `Trace`
+are pure standard library: importing them never pulls in `pydantic` or
+`requests`, so they work in environments where those extras are not
+installed. (`cast_json` is the one exception — it imports `pydantic`
+lazily, on first call, with a clear error if it is missing.)
 
 ```python
 from rapid_agent import BudgetCap, BudgetExceeded
@@ -113,6 +116,65 @@ cap.commit(0.012)
 cap.reserve(0.05)    # BudgetExceeded
 ```
 
+## API reference
+
+Everything below is exported from the top-level `rapid_agent` package.
+
+### `run_brief(topic, urls, *, max_usd=0.05, extra_hosts=None, client=None) -> AgentResult`
+
+Run the whole pipeline with sensible defaults. `urls` are fetched only if
+their host passes the default allowlist (extend it with `extra_hosts`).
+`max_usd` is the hard spend cap for the run. Pass a custom `client` (for
+example `StubClient()`) to avoid a live model call. Returns an
+`AgentResult` with `.brief`, `.trace` and `.fetched`. Raises `RuntimeError`
+if no source could be fetched and `BudgetExceeded` if the cap is hit.
+
+### `RapidAgent(client, budget, allowlist, session=None)`
+
+The agent object behind `run_brief`, for when you want to supply the three
+governance layers yourself. Call `.run(topic, urls)` to get an
+`AgentResult`. `session` is an optional `requests.Session` (or any object
+with a compatible `get`) used for fetching.
+
+### `Brief` / `BriefItem`
+
+pydantic models for the typed output. `Brief` has `.topic: str`,
+`.items: list[BriefItem]` and `.overall_takeaway: str`. Each `BriefItem`
+has `.url`, `.title`, `.summary` and `.key_points: list[str]`.
+
+### `BudgetCap(max_usd, spent_usd=0.0)`
+
+USD spend cap. `reserve(projected_usd)` raises `BudgetExceeded` if the call
+would push total spend past `max_usd`; `commit(actual_usd)` records actual
+spend; `remaining_usd` is the (non-negative) headroom left.
+
+### `EgressAllowlist(allowed_hosts=[])`
+
+Host allowlist. `check(url)` raises `EgressDenied` unless the URL host
+matches an entry exactly or is a subdomain of one. `with_extra(hosts)`
+returns a new allowlist with extra hosts (the original is unchanged).
+
+### `cast_json(text, schema, *, retry=None, max_retries=1) -> BaseModel`
+
+Parse model output into a pydantic `schema`. Strips ```` ```json ````
+fences, and if parsing or validation fails it calls `retry(repair_prompt)`
+(up to `max_retries` times) with the schema and the error embedded, so a
+model can self-correct. Raises `OutputCastError` if every attempt fails.
+Requires `pydantic`.
+
+### `Trace` / `TraceEvent`
+
+Per-run event log. `start(name)` then `finish(name, *, usd=, input_tokens=,
+output_tokens=, meta=)` records one `TraceEvent`. `total_usd`, `total_ms`
+and `to_dict()` (JSON-serializable) summarize the run.
+
+### `GeminiClient` / `StubClient` / `get_default_client(api_key=None)`
+
+`GeminiClient` wraps `google-generativeai`. `StubClient` returns a
+deterministic, schema-valid `Brief` with no network call. `get_default_client`
+returns a `GeminiClient` if a `GEMINI_API_KEY` / `GOOGLE_API_KEY` is set
+(and the SDK is installed) and a `StubClient` otherwise.
+
 ## Project layout
 
 ```
@@ -122,21 +184,36 @@ rapid-agent/
 │   ├── agent.py               # RapidAgent: fetch + LLM + cast + trace
 │   ├── brief.py               # Brief / BriefItem pydantic models
 │   ├── client.py              # GeminiClient + StubClient
-│   └── governance.py          # cast_json, BudgetCap, EgressAllowlist, Trace
-├── tests/                     # 24 tests, ~0.2s
+│   ├── governance.py          # cast_json, BudgetCap, EgressAllowlist, Trace
+│   └── py.typed               # PEP 561 marker: inline type hints ship
+├── tests/                     # 42 unittest tests, <1s
+├── .github/workflows/ci.yml   # py_compile + unittest on 3.9-3.12
 ├── DEPLOY.md                  # Cloud Run + Vertex AI walkthrough
 └── pyproject.toml
 ```
 
 ## Run the tests
 
+The test suite is written with the Python standard-library `unittest`
+module, so it needs no extra tooling beyond the package itself:
+
+```bash
+python -m pip install -e .
+python -m unittest discover -s tests
+```
+
+pytest works too, if you prefer it:
+
 ```bash
 python -m pip install -e '.[dev]'
 python -m pytest
 ```
 
-24 tests, around 200 ms. The full suite runs without network and
-without a Gemini key.
+42 tests, well under a second. The full suite runs without network and
+without a Gemini key. Tests that require an optional dependency
+(`pydantic` for typed output, `requests` for fetching) skip cleanly when
+that dependency is not installed, so the governance primitives can be
+tested on their own.
 
 ## Swap to Vertex AI for production
 

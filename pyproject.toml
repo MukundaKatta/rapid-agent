@@ -42,6 +42,12 @@ Issues = "https://github.com/MukundaKatta/rapid-agent/issues"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+# Ship the PEP 561 marker so downstream type checkers use the inline hints.
+rapid_agent = ["py.typed"]
+
 [tool.pytest.ini_options]
+# pytest is supported but optional: the suite is written with the standard
+# library `unittest` and also runs via `python -m unittest discover -s tests`.
 testpaths = ["tests"]
 addopts = "-q"

@@ -10,6 +10,12 @@ documented:
 
 We inline minimal versions so the demo runs with zero PyPI pulls. In
 production, install the sibling libs and swap the imports.
+
+``BudgetCap``, ``EgressAllowlist`` and ``Trace`` are pure standard library
+and have no third-party dependency: importing this module never imports
+``pydantic``. Only :func:`cast_json` needs ``pydantic``, and it imports it
+lazily on first use, so the budget / egress / trace primitives can be used
+on their own even when ``pydantic`` is not installed.
 """
 
 from __future__ import annotations
@@ -18,10 +24,11 @@ import json
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Iterable, List, Optional, Type
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional, Type
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, ValidationError
+if TYPE_CHECKING:  # pragma: no cover - import only for type checkers
+    from pydantic import BaseModel
 
 
 # ---------------------------------------------------------------------------
@@ -58,7 +65,17 @@ def cast_json(
     contains the validation error so a model can self-correct.
 
     Raises OutputCastError if no attempt succeeds.
+
+    ``pydantic`` is imported lazily so that the rest of this module (the
+    budget cap, egress allowlist and trace) stays importable without it.
     """
+    try:
+        from pydantic import ValidationError
+    except ImportError as e:  # pragma: no cover - exercised only without pydantic
+        raise OutputCastError(
+            "cast_json requires pydantic. Install it with: pip install pydantic"
+        ) from e
+
     last_err: Optional[str] = None
     attempt_text = text
 
